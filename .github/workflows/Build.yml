@@ -16,19 +16,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # 1. دریافت سورس پروژه
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. نصب Java 17
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3. بررسی و استخراج فایل پروژه
       - name: Extract Android project
         shell: bash
         run: |
@@ -36,11 +32,8 @@ jobs:
 
           ZIP_FILE="How_to_Become_Bach_Android_Project.zip"
 
-          echo "Checking project ZIP..."
-
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP not found!"
-            ls -la
+            echo "ERROR: ZIP file not found"
             exit 1
           fi
 
@@ -48,27 +41,33 @@ jobs:
 
           mkdir -p "$RUNNER_TEMP/android-source"
 
-          unzip -oq "$ZIP_FILE" \
-            -d "$RUNNER_TEMP/android-source"
+          unzip -oq "$ZIP_FILE" -d "$RUNNER_TEMP/android-source"
 
-          PROJECT_DIR="$RUNNER_TEMP/android-source/HowToBecomeBach"
+          echo "Searching for Android project..."
 
-          if [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
-            echo "ERROR: settings.gradle.kts not found!"
-            find "$RUNNER_TEMP/android-source" -maxdepth 5 -type f
+          PROJECT_FILE=$(find "$RUNNER_TEMP/android-source" \
+            -type f \
+            -path "*/HowToBecomeBach/settings.gradle.kts" \
+            | head -n 1)
+
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "ERROR: Android project not found"
+            find "$RUNNER_TEMP/android-source" -maxdepth 7 -type f
             exit 1
           fi
 
+          PROJECT_DIR="${PROJECT_FILE%/settings.gradle.kts}"
+
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app/build.gradle.kts not found!"
+            echo "ERROR: app/build.gradle.kts not found"
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Project extracted successfully."
+          echo "Project found:"
+          echo "$PROJECT_DIR"
 
-      # 4. نصب Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -76,15 +75,13 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
           accept-android-sdk-licenses: true
 
-      # 5. نصب Gradle نسخه 8.7
-      - name: Setup Gradle 8.7
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # 6. بررسی محیط ساخت
-      - name: Check build environment
-        shell: bash
+      - name: Check project configuration
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
           echo "Java version:"
           java -version
@@ -92,25 +89,12 @@ jobs:
           echo "Gradle version:"
           gradle --version
 
-          echo "Android SDK:"
-          echo "$ANDROID_HOME"
-
           echo "Project directory:"
-          echo "$PROJECT_DIR"
+          pwd
 
-      # 7. بررسی فایل های پروژه
-      - name: Check project files
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          echo "Project files:"
-          find . -maxdepth 5 -type f | sort
+          echo "Checking JVM targets:"
+          grep -n -E "sourceCompatibility|targetCompatibility|jvmTarget" app/build.gradle.kts
 
-          echo "Checking Gradle configuration..."
-          cat settings.gradle.kts
-          cat build.gradle.kts
-          cat app/build.gradle.kts
-
-      # 8. ساخت APK
       - name: Build Debug APK
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
@@ -120,22 +104,9 @@ jobs:
           gradle assembleDebug \
             --no-daemon \
             --stacktrace \
-            --info \
             --warning-mode all \
             2>&1 | tee "$RUNNER_TEMP/build.log"
 
-      # 9. نمایش اطلاعات APK
-      - name: Check generated APK
-        if: success()
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          echo "Searching for APK..."
-
-          find app/build/outputs/apk -type f -name "*.apk"
-
-          ls -lh app/build/outputs/apk/debug/
-
-      # 10. دریافت فایل APK
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
@@ -145,8 +116,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # 11. ذخیره گزارش خطا در صورت شکست
-      - name: Upload build error log
+      - name: Upload error log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
