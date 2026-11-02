@@ -22,18 +22,27 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # از نسخه مشخص Command-line Tools استفاده می‌کنیم
+      # تا دریافت خودکار آخرین نسخه باعث خطای sdkmanager نشود.
+      - name: تنظیم Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          accept-android-sdk-licenses: true
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+
       - name: تنظیم Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      - name: تنظیم Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: ساخت APK آزمایشی
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
-      - name: بارگذاری فایل APK
+      - name: بارگذاری APK
         uses: actions/upload-artifact@v4
         with:
           name: How-to-Become-Bach-debug-apk
