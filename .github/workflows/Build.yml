@@ -25,16 +25,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: '12266719'
-          accept-android-sdk-licenses: true
+      - name: Check Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$ANDROID_HOME"
+          command -v sdkmanager
+          yes | sdkmanager --licenses
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+          sdkmanager --install 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -51,4 +51,3 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
-
