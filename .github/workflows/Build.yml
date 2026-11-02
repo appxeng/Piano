@@ -42,7 +42,7 @@ jobs:
 
           if [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
             echo "ERROR: settings.gradle.kts not found!"
-            find "$RUNNER_TEMP/android-source" -maxdepth 4 -type f
+            find "$RUNNER_TEMP/android-source" -maxdepth 5 -type f
             exit 1
           fi
 
@@ -53,8 +53,6 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Android project found successfully."
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -62,13 +60,17 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
           accept-android-sdk-licenses: true
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Check Gradle version
+        run: gradle --version
 
       - name: Build Debug APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          gradle --version
           gradle assembleDebug --stacktrace
 
       - name: Upload APK
