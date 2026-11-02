@@ -1,0 +1,42 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: دریافت کدهای پروژه
+        uses: actions/checkout@v4
+
+      - name: تنظیم Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: تنظیم Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: تنظیم Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: ساخت APK آزمایشی
+        run: gradle assembleDebug
+
+      - name: بارگذاری فایل APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: How-to-Become-Bach-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
