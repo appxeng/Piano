@@ -1,5 +1,5 @@
 
-name: Build Android APK
+name: Build How to Become Bach APK
 
 'on':
   push:
@@ -16,38 +16,104 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source
+      - name: Checkout Project
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Check Android SDK
+      - name: Diagnose Android SDK
+        shell: bash
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          test -d "$ANDROID_HOME"
-          command -v sdkmanager
-          yes | sdkmanager --licenses
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-      - name: Install Android SDK packages
+          for d in \
+            "$ANDROID_HOME" \
+            "$ANDROID_SDK_ROOT" \
+            /usr/local/lib/android/sdk \
+            /opt/android-sdk \
+            /usr/lib/android-sdk
+          do
+            if [ -n "$d" ] && [ -d "$d" ]; then
+              echo "FOUND SDK: $d"
+              ls -la "$d"
+            else
+              echo "NOT FOUND: $d"
+            fi
+          done
+
+          echo "Searching for sdkmanager..."
+          find /usr/local/lib/android /opt /usr/lib \
+            -maxdepth 8 -type f -name sdkmanager \
+            -print 2>/dev/null || true
+
+      - name: Locate Android SDK
+        shell: bash
         run: |
-          sdkmanager --install 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+          SDK=""
+          for d in \
+            "$ANDROID_HOME" \
+            "$ANDROID_SDK_ROOT" \
+            /usr/local/lib/android/sdk \
+            /opt/android-sdk \
+            /usr/lib/android-sdk
+          do
+            if [ -n "$d" ] && [ -d "$d/platform-tools" ]; then
+              SDK="$d"
+              break
+            fi
+          done
 
-      - name: Set up Gradle
+          if [ -z "$SDK" ]; then
+            echo "Android SDK not found."
+            exit 1
+          fi
+
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "Using SDK: $SDK"
+
+      - name: Install Android SDK Components
+        shell: bash
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME" \
+            -type f -name sdkmanager 2>/dev/null | head -n 1)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
+
+          chmod +x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
+      - name: Check Project Files
+        run: |
+          ls -la
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
+
+      - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: How-to-Become-Bach-debug-apk
+          name: How-to-Become-Bach-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
