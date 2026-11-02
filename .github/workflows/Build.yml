@@ -2,141 +2,142 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    name: Build APK
+    name: Build How To Become Bach
     runs-on: ubuntu-latest
-
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
 
-      # 1. دریافت سورس پروژه
+      # 1. دریافت فایل های مخزن
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       # 2. نصب Java 17
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3. بررسی Android SDK
-      - name: Check Android SDK
-        shell: bash
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
+      # 3. نصب Android SDK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          accept-android-sdk-licenses: true
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
-          if [ ! -d "$ANDROID_HOME" ]; then
-            echo "ERROR: Android SDK not found!"
-            exit 1
-          fi
-
-          ls -la "$ANDROID_HOME"
-
-      # 4. پیدا کردن SDK Manager
-      - name: Locate SDK Manager
-        shell: bash
-        run: |
-          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
-            -type f -name sdkmanager | head -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found!"
-            exit 1
-          fi
-
-          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
-
-          echo "Found SDK Manager:"
-          echo "$SDKMANAGER"
-
-      # 5. پذیرش مجوزهای Android SDK
-      - name: Accept Android Licenses
-        shell: bash
-        run: |
-          bash "$SDKMANAGER" \
-            --sdk_root="$ANDROID_HOME" \
-            --licenses < <(yes)
-
-      # 6. نصب ابزارهای موردنیاز Android
-      - name: Install Android SDK Components
-        shell: bash
-        run: |
-          bash "$SDKMANAGER" \
-            --sdk_root="$ANDROID_HOME" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      # 7. بررسی نصب SDK
-      - name: Verify Android SDK
-        shell: bash
-        run: |
-          echo "Installed platforms:"
-          ls "$ANDROID_HOME/platforms"
-
-          echo "Installed build tools:"
-          ls "$ANDROID_HOME/build-tools"
-
-      # 8. نصب Gradle 8.7
+      # 4. نصب Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      # 9. بررسی ساختار پروژه
-      - name: Check Project Files
+      # 5. بررسی وجود فایل ZIP
+      - name: Check Project ZIP
         shell: bash
         run: |
-          echo "Project directory:"
-          ls -la
+          echo "Checking project archive..."
 
-          if [ ! -f "settings.gradle.kts" ]; then
+          if [ ! -f "How_to_Become_Bach_Android_Project.zip" ]; then
+            echo "ERROR: Project ZIP not found!"
+            exit 1
+          fi
+
+          unzip -t How_to_Become_Bach_Android_Project.zip
+
+      # 6. استخراج پروژه اصلی
+      - name: Extract Android Project
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-source"
+
+          unzip -q \
+            How_to_Become_Bach_Android_Project.zip \
+            -d "$RUNNER_TEMP/android-source"
+
+          PROJECT_DIR="$RUNNER_TEMP/android-source/HowToBecomeBach"
+
+          if [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
             echo "ERROR: settings.gradle.kts not found!"
             exit 1
           fi
 
-          if [ ! -f "app/build.gradle.kts" ]; then
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
             echo "ERROR: app/build.gradle.kts not found!"
             exit 1
           fi
 
-      # 10. ساخت APK
+          echo "Project directory: $PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      # 7. بررسی ساختار پروژه
+      - name: Verify Project Structure
+        shell: bash
+        run: |
+          echo "Checking Android project..."
+
+          ls -la "$PROJECT_DIR"
+          ls -la "$PROJECT_DIR/app"
+
+          echo "Project structure verified."
+
+      # 8. بررسی نسخه Java و Gradle
+      - name: Verify Build Environment
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          java -version
+          gradle --version
+
+      # 9. ساخت APK
       - name: Build Debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
         run: |
           gradle assembleDebug --stacktrace
 
-      # 11. بررسی خروجی APK
+      # 10. بررسی فایل APK
       - name: Verify APK
         shell: bash
         run: |
-          echo "Searching for APK files..."
+          APK_PATH="$PROJECT_DIR/app/build/outputs/apk/debug"
 
-          find app/build/outputs/apk -type f -name "*.apk"
+          echo "Checking APK output..."
 
-          if ! ls app/build/outputs/apk/debug/*.apk >/dev/null 2>&1; then
-            echo "ERROR: APK file was not generated!"
+          if [ ! -d "$APK_PATH" ]; then
+            echo "ERROR: APK output directory not found!"
             exit 1
           fi
 
-      # 12. دریافت فایل APK
-      - name: Upload APK Artifact
+          find "$APK_PATH" -type f -name "*.apk"
+
+          if ! ls "$APK_PATH"/*.apk >/dev/null 2>&1; then
+            echo "ERROR: APK was not generated!"
+            exit 1
+          fi
+
+          echo "APK generated successfully."
+
+      # 11. بارگذاری APK برای دانلود
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: How-to-Become-Bach-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
