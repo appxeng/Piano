@@ -1,78 +1,48 @@
 
-name: Build Android APK
+name: Build How to Become Bach APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-      - master
-  workflow_dispatch:
-
-permissions:
-  contents: read
 
 jobs:
   build:
-    name: Build How To Become Bach
     runs-on: ubuntu-latest
 
     steps:
-
-      # 1. دریافت فایل های مخزن
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. نصب Java 17
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3. نصب Android SDK
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 12266719
-          accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
-
-      # 4. نصب Gradle
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.7'
-
-      # 5. بررسی وجود فایل ZIP
-      - name: Check Project ZIP
+      - name: Locate and extract Android project
         shell: bash
         run: |
-          echo "Checking project archive..."
+          set -e
 
-          if [ ! -f "How_to_Become_Bach_Android_Project.zip" ]; then
+          ZIP_FILE="How_to_Become_Bach_Android_Project.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
             echo "ERROR: Project ZIP not found!"
             exit 1
           fi
 
-          unzip -t How_to_Become_Bach_Android_Project.zip
+          unzip -t "$ZIP_FILE"
 
-      # 6. استخراج پروژه اصلی
-      - name: Extract Android Project
-        shell: bash
-        run: |
           mkdir -p "$RUNNER_TEMP/android-source"
-
-          unzip -q \
-            How_to_Become_Bach_Android_Project.zip \
-            -d "$RUNNER_TEMP/android-source"
+          unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/android-source"
 
           PROJECT_DIR="$RUNNER_TEMP/android-source/HowToBecomeBach"
 
           if [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
             echo "ERROR: settings.gradle.kts not found!"
+            find "$RUNNER_TEMP/android-source" -maxdepth 4 -type f
             exit 1
           fi
 
@@ -81,63 +51,29 @@ jobs:
             exit 1
           fi
 
-          echo "Project directory: $PROJECT_DIR"
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      # 7. بررسی ساختار پروژه
-      - name: Verify Project Structure
-        shell: bash
-        run: |
-          echo "Checking Android project..."
+          echo "Android project found successfully."
 
-          ls -la "$PROJECT_DIR"
-          ls -la "$PROJECT_DIR/app"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          accept-android-sdk-licenses: true
 
-          echo "Project structure verified."
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      # 8. بررسی نسخه Java و Gradle
-      - name: Verify Build Environment
-        working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
-        run: |
-          java -version
-          gradle --version
-
-      # 9. ساخت APK
       - name: Build Debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        shell: bash
         run: |
+          gradle --version
           gradle assembleDebug --stacktrace
 
-      # 10. بررسی فایل APK
-      - name: Verify APK
-        shell: bash
-        run: |
-          APK_PATH="$PROJECT_DIR/app/build/outputs/apk/debug"
-
-          echo "Checking APK output..."
-
-          if [ ! -d "$APK_PATH" ]; then
-            echo "ERROR: APK output directory not found!"
-            exit 1
-          fi
-
-          find "$APK_PATH" -type f -name "*.apk"
-
-          if ! ls "$APK_PATH"/*.apk >/dev/null 2>&1; then
-            echo "ERROR: APK was not generated!"
-            exit 1
-          fi
-
-          echo "APK generated successfully."
-
-      # 11. بارگذاری APK برای دانلود
-      - name: Upload Android APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: How-to-Become-Bach-APK
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
